@@ -1,24 +1,9 @@
-# -*- coding: utf-8 -*-
-#
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
+"""
+    Module contain all type definition
 
-from airflow.lineage.datasets import *
+"""
+from airflow.lineage.backend.atlas.additional_attributes import additonal_operator_attributes
+from airflow.lineage.datasets import StandardAirflowOperator, StandardTable, StandardColumn, StandardFile
 
 TABLE_COLUMN_RELATIONSHIP_TYPE = "standard_table_column"  # relationship name
 
@@ -171,7 +156,7 @@ standard_table_type = {
     "relationshipAttributeDefs": [
         {
             "name": "columns",
-            "typeName": f"array<{StandardColumn.type_name}>",
+            "typeName": "array<{}>".format(StandardColumn.type_name),
             "isOptional": True,
             "cardinality": "SET",
             "valuesMinCount": -1,
@@ -246,7 +231,7 @@ standard_table_column_relationship_type = {
     "description": "Standard table to standard column relationship",
     "serviceType": "abstract_source",
     "relationshipCategory": "COMPOSITION",
-    "relationshipLabel": f"__{StandardTable.type_name}.columns",
+    "relationshipLabel": "__{}.columns".format(StandardTable.type_name),
     "endDef1": {
         "type": StandardTable.type_name,
         "name": "columns",

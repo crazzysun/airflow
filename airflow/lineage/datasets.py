@@ -17,9 +17,10 @@
 # specific language governing permissions and limitations
 # under the License.
 import six
-
-from typing import List
 from jinja2 import Environment
+from typing import List
+
+from airflow.lineage.backend.atlas.additional_attributes import additonal_operator_attributes
 
 
 def _inherited(cls):
@@ -30,7 +31,7 @@ def _inherited(cls):
 
 class DataSet(object):
     attributes = []  # type: List[str]
-    type_name = "dataSet"
+    type_name = "DataSet"
 
     def __init__(self, qualified_name=None, data=None, **kwargs):
         self._qualified_name = qualified_name
@@ -139,3 +140,51 @@ class Operator(DataSet):
     # todo we can derive this from the spec
     attributes = ["dag_id", "task_id", "command", "conn_id", "name", "execution_date",
                   "start_date", "end_date", "inputs", "outputs"]
+
+
+class StandardAirflowOperator(DataSet):
+    """
+        Represents airflow operator entity, this type used for storing lineage data
+    """
+
+    type_name = "airflow_standard_operator"
+    attributes = ["dag_id", "task_id", "command", "conn_id", "name", "last_execution_date",
+                  "start_date", "end_date", "inputs", "outputs", "template_fields"] + additonal_operator_attributes
+
+
+class StandardTable(DataSet):
+    """
+        Represents abstract table atlas entity for any sql-like source
+        Table are connected with column using atlas relationship attirbute "columns".
+        See typedefs in backend.altas_typedef.py
+        Relationship attribute "columns" is uses for showing schema in atlas ui.
+
+    """
+    type_name = "standard_table"
+    attributes = ['schema_name', "name", "table_name"]
+
+
+class StandardColumn(DataSet):
+    """
+        Represent abstract column atlas entity for any sql-like source.
+        Column are connected with table using atlas relationship attirbute "table".
+        See typedefs in backend.altas_typedef.py
+    """
+    type_name = "standard_column"
+    attributes = ['column', 'type', 'name']
+
+
+class StandardFile(DataSet):
+    """
+        Represent abstact file in any file system. It can be localfs, hdfs, s3 or gcs.
+    """
+    type_name = "standard_file"
+    attributes = ['name', 'path', 'cluster_name']
+
+
+class RedshiftTable(DataSet):
+    """
+        Represent redshift table, type definition lay in atlas redshift bridge package.
+    """
+    type_name = "redshift_table"
+    attributes = ['schema_name', "name", "table_name"]

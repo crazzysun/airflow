@@ -17,32 +17,128 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-from airflow.configuration import conf
-from airflow.lineage import datasets
-from airflow.lineage.backend import LineageBackend
-from airflow.lineage.backend.atlas.typedefs import operator_typedef
-from airflow.utils.timezone import convert_to_utc
+"""
+This module responsible for sending lineage data.
 
+This module require next properties in airflow.cfg:
+
+    [lineage]
+    backend = airflow_lineage.backend.atlas_backend.AltasBackend
+
+    [atlas]
+        username = username
+        password = password
+        host = host
+        port = port
+
+
+    [atlas.extra]
+        create_if_not_absent = True
+        fail_if_lineage_error = True
+        timeout = 600
+"""
+
+import json
+import logging
+
+from airflow.lineage.backend.atlas.additional_attributes import additonal_operator_attributes
 from atlasclient.client import Atlas
 from atlasclient.exceptions import HttpError
 
+from airflow.configuration import conf
+from airflow.exceptions import AirflowException
+from airflow.lineage.backend import LineageBackend
+from airflow.lineage.backend.atlas import atlas_typedefs
+from airflow.lineage.datasets import StandardAirflowOperator
+from airflow.utils.timezone import convert_to_utc
+
 SERIALIZED_DATE_FORMAT_STR = "%Y-%m-%dT%H:%M:%S.%fZ"
+atlas_conn_id = "atlas_default"
 
 _username = conf.get("atlas", "username")
 _password = conf.get("atlas", "password")
 _port = conf.get("atlas", "port")
 _host = conf.get("atlas", "host")
+_create_if_not_exists = conf.getboolean("atlas.extra",
+                                        "create_if_not_absent")  # If true, missing input and output atlas entities will create or update
+_fail_if_lineage_error = conf.getboolean("atlas.extra",
+                                         "fail_if_lineage_error")  # If true, operator will be failed in error in sending lineage data
+_timeout = conf.getint("atlas.extra", "timeout")  # timeout for atlas rest api client
 
 
 class AtlasBackend(LineageBackend):
+    """
+    A class what should be used in airflow.cfg as backend lineage class.
+    This class responsible for sending data to atlas.
+
+    """
+
     @staticmethod
     def send_lineage(operator, inlets, outlets, context):
-        client = Atlas(_host, port=_port, username=_username, password=_password)
-        try:
-            client.typedefs.create(data=operator_typedef)
-        except HttpError:
-            client.typedefs.update(data=operator_typedef)
+        """
 
+        :param operator: Airflow operator what was executed
+        :type BaseOperator
+
+        :param inlets: dict contains datasets what used as inputs for lineage flow, should contain key "dataset",
+        and corresponding value should contain list of atlas entities object.
+        All avaliable atlas entities class can be in models.datasets
+        :type dict
+        :param outlets: dict contains datasets what used as outputs for lineage flow. Same as inlets. See comments above.
+        :type dict
+        :param context: Airflow task instance context
+        :return: Nothing
+        """
+        try:
+            AltasBackend.__send_lineage(operator, inlets, outlets, context)
+        except Exception as err:
+            logging.error("Error in sending lineage data")
+            logging.error(err)
+            if _fail_if_lineage_error:
+                raise AirflowException(err)
+
+    @staticmethod
+    def __send_lineage(operator, inlets, outlets, context):
+        logging.info("Start sending lineage data")
+        logging.info(
+            "Create input and output entities options is " + "enabled" if _create_if_not_exists else "disabled")
+        host = _host
+        port = _port
+        username = _username
+        password = _password
+        logging.info("Host: {}, port: {}".format(host, port))
+
+        client = Atlas(host=host, port=port, username=username, password=password, timeout=_timeout)
+        types_data = {
+            "entityDefs": [
+                atlas_typedefs.standard_table_type,
+                atlas_typedefs.standard_column_type,
+                atlas_typedefs.standard_file_type],
+            "relationshipDefs": [atlas_typedefs.standard_table_column_relationship_type]
+        }
+
+        try:
+            logging.info("Start creating/updating airflow lineage datasets types")
+            client.typedefs.create(data=types_data)
+        except HttpError as err:
+            logging.error(err)
+            client.typedefs.update(data=types_data)
+
+        try:
+            logging.info("Start creating/updating airflow operator lineage type")
+            client.typedefs.create(data=atlas_typedefs.operator_typedef)
+        except HttpError as err:
+            logging.error(err)
+            client.typedefs.update(data=atlas_typedefs.operator_typedef)
+
+        try:
+            logging.info("Start creating/updating airflow classifications")
+            client.typedefs.create(data=atlas_typedefs.classifications_typedef)
+        except HttpError as err:
+            logging.error(err)
+            client.typedefs.update(data=atlas_typedefs.classifications_typedef)
+
+        logging.info("Types was created/updated")
         _execution_date = convert_to_utc(context['ti'].execution_date)
         _start_date = convert_to_utc(context['ti'].start_date)
         _end_date = convert_to_utc(context['ti'].end_date)
@@ -52,13 +148,12 @@ class AtlasBackend(LineageBackend):
             for entity in inlets:
                 if entity is None:
                     continue
-
                 entity.set_context(context)
-                client.entity_post.create(data={"entity": entity.as_dict()})
+                if _create_if_not_exists:
+                    AltasBackend._create_entity(client=client, data=entity)
                 inlet_list.append({"typeName": entity.type_name,
                                    "uniqueAttributes": {
-                                       "qualifiedName": entity.qualified_name
-                                   }})
+                                       "qualifiedName": entity.qualified_name}})
 
         outlet_list = []
         if outlets:
@@ -67,33 +162,88 @@ class AtlasBackend(LineageBackend):
                     continue
 
                 entity.set_context(context)
-                client.entity_post.create(data={"entity": entity.as_dict()})
+                if _create_if_not_exists:
+                    AltasBackend._create_entity(client=client, data={"entity": entity.as_dict()})
                 outlet_list.append({"typeName": entity.type_name,
                                     "uniqueAttributes": {
-                                        "qualifiedName": entity.qualified_name
-                                    }})
+                                        "qualifiedName": entity.qualified_name}})
 
+        template_fields = AltasBackend.template_fields_to_string(operator)
+        logging.info(template_fields)
         operator_name = operator.__class__.__name__
         name = "{} {} ({})".format(operator.dag_id, operator.task_id, operator_name)
-        qualified_name = "{}_{}_{}@{}".format(operator.dag_id,
-                                              operator.task_id,
-                                              _execution_date,
-                                              operator_name)
+        qualified_name = "{}_{}_{}".format(operator.dag_id,
+                                           operator.task_id,
+                                           operator_name)
 
         data = {
             "dag_id": operator.dag_id,
             "task_id": operator.task_id,
-            "execution_date": _execution_date.strftime(SERIALIZED_DATE_FORMAT_STR),
+            "last_execution_date": _execution_date.strftime(SERIALIZED_DATE_FORMAT_STR),
             "name": name,
             "inputs": inlet_list,
             "outputs": outlet_list,
             "command": operator.lineage_data,
+            "template_fields": template_fields
         }
+
+        for attr in additonal_operator_attributes:
+            data[attr] = getattr(operator, attr, None)
 
         if _start_date:
             data["start_date"] = _start_date.strftime(SERIALIZED_DATE_FORMAT_STR)
         if _end_date:
             data["end_date"] = _end_date.strftime(SERIALIZED_DATE_FORMAT_STR)
 
-        process = datasets.Operator(qualified_name=qualified_name, data=data)
-        client.entity_post.create(data={"entity": process.as_dict()})
+        process = StandardAirflowOperator(qualified_name=qualified_name, data=data)
+        AltasBackend._create_entity(client=client, data={"entity": process.as_dict()})
+        logging.info("Lineage data sent successfully")
+
+
+@staticmethod
+def template_fields_to_string(operator) -> str:
+    """
+    :param operator: Airflow operator what was executed
+    :return: Json string representing all template fields in operator.
+    """
+    result = dict()
+    for field in operator.__class__.template_fields:
+        result[field] = str(getattr(operator, field, None))
+    return json.dumps(result)
+
+
+@staticmethod
+def _create_entity(client: Atlas, data: dict):
+    """
+    Create Atlas entity and update it's classification
+    
+    :param client: atlas client
+    :param data: dict with entity data
+    :return: Nothing
+    """
+    guid = AltasBackend._get_response_guid(client.entity_post.create(data=data))
+
+
+@staticmethod
+def _get_response_guid(response) -> str:
+    """ Get guid of created entity.
+    If the entity already exists, just return guid of existing entity.
+    """
+    try:
+        guid = response["mutatedEntities"]["CREATE"][0]["guid"]
+    except KeyError:
+        guid = list(response["guidAssignments"].values())[0]
+    return guid
+
+#
+# @staticmethod
+# def _add_classification(client, entity_guid, classification_name):
+#     new_classifications = [{"typeName": classification_name}]
+#     entity = client.get_entity(entity_guid)
+#
+#     for classification_info in entity.classifications:
+#         for classification_item in classification_info.list:
+#             if classification_item.typeName == classification_name:
+#                 return  # classification already added
+#
+#     entity.classifications.create(data=new_classifications)

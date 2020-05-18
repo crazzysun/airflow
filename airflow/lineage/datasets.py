@@ -20,8 +20,6 @@ import six
 from jinja2 import Environment
 from typing import List
 
-from airflow.lineage.backend.atlas.additional_attributes import additonal_operator_attributes
-
 
 def _inherited(cls):
     return set(cls.__subclasses__()).union(
@@ -30,8 +28,9 @@ def _inherited(cls):
 
 
 class DataSet(object):
-    attributes = []  # type: List[str]
+    attributes = ["name"]  # type: List[str]
     type_name = "DataSet"
+    classification_name = "Standard_entities"
 
     def __init__(self, qualified_name=None, data=None, **kwargs):
         self._qualified_name = qualified_name
@@ -134,12 +133,12 @@ class HadoopFile(File):
         self._data['clusterName'] = self.cluster_name
 
 
-class Operator(DataSet):
-    type_name = "airflow_operator"
-
-    # todo we can derive this from the spec
-    attributes = ["dag_id", "task_id", "command", "conn_id", "name", "execution_date",
-                  "start_date", "end_date", "inputs", "outputs"]
+class StandardDataSet(DataSet):
+    """
+        Represents default DataSet atlas type
+    """
+    type_name = "DataSet"
+    attributes = ["name"]
 
 
 class StandardAirflowOperator(DataSet):
@@ -148,15 +147,16 @@ class StandardAirflowOperator(DataSet):
     """
 
     type_name = "airflow_standard_operator"
-    attributes = ["dag_id", "task_id", "command", "conn_id", "name", "last_execution_date",
-                  "start_date", "end_date", "inputs", "outputs", "template_fields"] + additonal_operator_attributes
+    attributes = ["dag_id", "task_id", "task_type", "command", "conn_id", "name", "last_execution_date",
+                  "start_date", "end_date", "inputs", "outputs", "template_fields"]
+    # TODO + additional_operator_attributes
 
 
 class StandardTable(DataSet):
     """
         Represents abstract table atlas entity for any sql-like source
-        Table are connected with column using atlas relationship attirbute "columns".
-        See typedefs in backend.altas_typedef.py
+        Table are connected with column using atlas relationship attribute "columns".
+        See typedefs in backend.atlas_typedef.py
         Relationship attribute "columns" is uses for showing schema in atlas ui.
 
     """
@@ -167,8 +167,8 @@ class StandardTable(DataSet):
 class StandardColumn(DataSet):
     """
         Represent abstract column atlas entity for any sql-like source.
-        Column are connected with table using atlas relationship attirbute "table".
-        See typedefs in backend.altas_typedef.py
+        Column are connected with table using atlas relationship attribute "table".
+        See typedefs in backend.atlas_typedef.py
     """
     type_name = "standard_column"
     attributes = ['column', 'type', 'name']
@@ -184,7 +184,7 @@ class StandardFile(DataSet):
 
 class RedshiftTable(DataSet):
     """
-        Represent redshift table, type definition lay in atlas redshift bridge package.
+        Represent redshift table, type definition lay in AtlasHook package.
     """
     type_name = "redshift_table"
-    attributes = ['schema_name', "name", "table_name"]
+    attributes = ['schema_name', 'name', 'table_name']

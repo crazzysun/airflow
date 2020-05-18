@@ -1,7 +1,7 @@
 """
     Module contains common function for create different dataset atlas entities.
 """
-from airflow.lineage.datasets import *
+from airflow.lineage.datasets import DataSet, StandardTable, StandardFile
 
 dataset_unique_key = "qualified_name"  # If key is represent, atlas dataset entity will be created, see StandardDataSet
 standard_table_unique_key = "full_table_name"  # If key is represent, atlas standard table entity will be created, see StandardTable
@@ -16,7 +16,7 @@ def transform_to_atlas_dataset_entity(qualified_name: str) -> DataSet:
     :return: Atlas DataSet entity object
     :type: StandardDataSet
     """
-    return DataSet(qualified_name=qualified_name)
+    return DataSet(qualified_name=qualified_name, data={"name": qualified_name})
 
 
 def __split_full_table_name(full_table_name: str) -> dict:
@@ -33,7 +33,7 @@ def __split_full_table_name(full_table_name: str) -> dict:
     }
 
 
-def transform_to_standard_table_entity(full_table_name: str) -> StandardTable:
+def transform_to_standard_table_entity(full_table_name: str):
     """
     Create Atlas StandardTable entity object from full table name
     :param full_table_name: Full table name with schema
@@ -47,21 +47,7 @@ def transform_to_standard_table_entity(full_table_name: str) -> StandardTable:
         "table_name": table_info['table_name']})
 
 
-def transform_to_redshift_table_entity(full_table_name: str) -> RedshiftTable:
-    """
-    Create Atlas RedshiftTable entity object from full table name
-    :param full_table_name: Full redshift table name with schema name
-    :return: Atlas Redshift table entity object
-    :type: RedshiftTable
-    """
-    table_info = __split_full_table_name(full_table_name)
-    return RedshiftTable(qualified_name=full_table_name, data={
-        "name": full_table_name,
-        "schema_name": table_info['schema_name'],
-        "table_name": table_info['table_name']})
-
-
-def transform_to_file_entity(full_path: str, cluster_name="none") -> StandardFile:
+def transform_to_file_entity(full_path: str, cluster_name="none"):
     """
     Create Atlas StandardFile entity object from full file path
     :param full_path: Full file path
@@ -71,7 +57,7 @@ def transform_to_file_entity(full_path: str, cluster_name="none") -> StandardFil
     :return: Atlas Standard file entity object
     :type: StandardFile
     """
-    return StandardFile(qualified_name=f"{full_path}@{cluster_name}", data={
+    return StandardFile(qualified_name="{}@{}".format(full_path, cluster_name), data={
         "name": full_path.split("/")[-1],
         "path": full_path,
         "cluster_name": cluster_name
@@ -97,8 +83,8 @@ def create_atlas_entities(entities) -> dict:
 
 def create_atlas_entity(entity: dict):
     """
-    Depends on attibute in dict, Create different atlas entity object
-    :param entity: Dict with attibutes for creating corresponding atlas entity.
+    Depends on attribute in dict, Create different atlas entity object
+    :param entity: Dict with attributes for creating corresponding atlas entity.
     :type entity: dict
     :return: Atlas entity object
     :type: DataSet
@@ -110,8 +96,6 @@ def create_atlas_entity(entity: dict):
         return transform_to_standard_table_entity(entity.get(standard_table_unique_key))
     if standard_file_unique_key in entity:
         return transform_to_file_entity(entity.get(standard_file_unique_key), entity.get("cluster_name", "none"))
-    if redshift_table_unique_key:
-        return transform_to_redshift_table_entity(entity.get(redshift_table_unique_key))
 
 
 def create_atlas_specific_type_entities(unique_key, values):
@@ -125,16 +109,16 @@ def create_atlas_specific_type_entities(unique_key, values):
 
 
 def create_atlas_dataset_entities(values):
-    return create_atlas_specific_type_entities(dataset_unique_key,values)
+    return create_atlas_specific_type_entities(dataset_unique_key, values)
 
 
 def create_atlas_standard_file_entities(values):
-    return create_atlas_specific_type_entities(standard_file_unique_key,values)
+    return create_atlas_specific_type_entities(standard_file_unique_key, values)
 
 
 def create_atlas_standard_table_entities(values):
-    return create_atlas_specific_type_entities(standard_table_unique_key,values)
+    return create_atlas_specific_type_entities(standard_table_unique_key, values)
 
 
 def create_atlas_redshift_table_entities(values):
-    return create_atlas_specific_type_entities(redshift_table_unique_key,values)
+    return create_atlas_specific_type_entities(redshift_table_unique_key, values)

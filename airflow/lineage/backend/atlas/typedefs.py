@@ -18,7 +18,7 @@
 # under the License.
 #
 
-from airflow.lineage.datasets import *
+from airflow.lineage.datasets import StandardTable, StandardColumn, StandardFile, StandardAirflowOperator
 
 TABLE_COLUMN_RELATIONSHIP_TYPE = "standard_table_column"  # relationship name
 
@@ -130,7 +130,12 @@ operator_attributes_defs = [
 """
     Generate additional operator attributes, these attributes taken from constants package
 """
-for attr in additonal_operator_attributes:
+additional_operator_attributes = ['sql', 'job_flow_id', 'cluster_states',
+                                  'job_flow_name', 'steps', 'labels', 'source_objects',
+                                  'bucket', 'schema_object', 'destination_project_dataset_table',
+                                  'hql', 'hiveconfs', 'schema']
+# TODO: delete additional_operator_attributes from here !!!
+for attr in additional_operator_attributes:
     operator_attributes_defs.append(to_string_attribute(attr))
 
 operator_typedef = {
@@ -171,7 +176,7 @@ standard_table_type = {
     "relationshipAttributeDefs": [
         {
             "name": "columns",
-            "typeName": f"array<{StandardColumn.type_name}>",
+            "typeName": "array<{}>".format(StandardColumn.type_name),
             "isOptional": True,
             "cardinality": "SET",
             "valuesMinCount": -1,
@@ -188,7 +193,7 @@ standard_table_type = {
 standard_column_type = {
     "superTypes": ["DataSet"],
     "name": StandardColumn.type_name,
-    "description": "Redshift column",
+    "description": "Standard table column",
     "attributeDefs": [
         {
             "name": "column",
@@ -197,18 +202,6 @@ standard_column_type = {
         {
             "name": "type",
             "typeName": "string"
-        },
-        {
-            "name": "encoding",
-            "typeName": "string"
-        },
-        {
-            "name": "distkey",
-            "typeName": "boolean"
-        },
-        {
-            "name": "sortkey",
-            "typeName": "int"
         },
         {
             "name": "notnull",
@@ -246,7 +239,7 @@ standard_table_column_relationship_type = {
     "description": "Standard table to standard column relationship",
     "serviceType": "abstract_source",
     "relationshipCategory": "COMPOSITION",
-    "relationshipLabel": f"__{StandardTable.type_name}.columns",
+    "relationshipLabel": "__{}.columns".format(StandardTable.type_name),
     "endDef1": {
         "type": StandardTable.type_name,
         "name": "columns",
@@ -275,26 +268,6 @@ standard_file_type = {
         {
             "name": "cluster_name",
             "typeName": "string"
-        }
-    ]
-}
-
-classifications_typedef = {
-    "enumDefs": [],
-    "structDefs": [],
-    "entityDefs": [],
-    "classificationDefs": [
-        {
-            "name": "Standard_entities",
-            "description": "All standard entities",
-            "superTypes": [],
-            "attributeDefs": []
-        },
-        {
-            "name": "Airflow_operators",
-            "description": "All airflow operators",
-            "superTypes": [],
-            "attributeDefs": []
         }
     ]
 }

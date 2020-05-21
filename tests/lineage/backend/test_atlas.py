@@ -44,7 +44,6 @@ class TestAtlas(unittest.TestCase):
         conf.set("atlas", "password", "none")
         conf.set("atlas", "host", "none")
         conf.set("atlas", "port", "0")
-
         self.atlas = AtlasBackend()
 
     @mock.patch("airflow.lineage.backend.atlas.Atlas")
@@ -74,8 +73,13 @@ class TestAtlas(unittest.TestCase):
         self.atlas.send_lineage(operator=op1, inlets=inlets_d,
                                 outlets=outlets_d, context=ctx)
 
-        self.assertEqual(td.create.call_count, 1)
+        self.assertEqual(td.create.call_count, 2)
         self.assertTrue(en.create.called)
-        self.assertEqual(len(en.mock_calls), 3)
+        print(en.mock_calls)
+        print(en.create.call_count)
+        self.assertEqual(en.create.call_count, 3)
 
         # test can be broader
+
+    def test_setup(self):
+        self.assertTrue(True)

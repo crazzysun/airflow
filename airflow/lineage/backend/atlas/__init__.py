@@ -58,11 +58,14 @@ _username = conf.get("atlas", "username")
 _password = conf.get("atlas", "password")
 _port = conf.get("atlas", "port")
 _host = conf.get("atlas", "host")
+# If true, missing input and output atlas entities will create or update
 _create_if_not_exists = conf.getboolean("atlas.extra",
-                                        "create_if_not_absent")  # If true, missing input and output atlas entities will create or update
+                                        "create_if_not_absent")
+# If true, operator will be failed in error in sending lineage data
 _fail_if_lineage_error = conf.getboolean("atlas.extra",
-                                         "fail_if_lineage_error")  # If true, operator will be failed in error in sending lineage data
-_timeout = conf.getint("atlas.extra", "timeout")  # timeout for atlas rest api client
+                                         "fail_if_lineage_error")
+# timeout for atlas rest api client
+_timeout = conf.getint("atlas.extra", "timeout")
 
 
 class AtlasBackend(LineageBackend):
@@ -76,11 +79,12 @@ class AtlasBackend(LineageBackend):
         """
         :param operator: Airflow operator what was executed
         :type BaseOperator
-        :param inlets: dict contains datasets what used as inputs for lineage flow, should contain key "dataset",
-        and corresponding value should contain list of atlas entities object.
+        :param inlets: dict contains datasets what used as inputs for lineage flow,
+        should contain key "dataset", and corresponding value should contain list of atlas entities object.
         All avaliable atlas entities class can be in models.datasets
         :type dict
-        :param outlets: dict contains datasets what used as outputs for lineage flow. Same as inlets. See comments above.
+        :param outlets: dict contains datasets what used as outputs for lineage flow. Same as inlets.
+         See comments above.
         :type dict
         :param context: Airflow task instance context
         :return: Nothing
@@ -96,8 +100,8 @@ class AtlasBackend(LineageBackend):
     @staticmethod
     def __send_lineage(operator, inlets, outlets, context):
         logging.info("Start sending lineage data")
-        logging.info(
-            "Create input and output entities options is " + "enabled" if _create_if_not_exists else "disabled")
+        logging.info("Create input and output entities options is " +
+                     "enabled" if _create_if_not_exists else "disabled")
         host = _host
         port = _port
         username = _username
@@ -189,7 +193,7 @@ class AtlasBackend(LineageBackend):
         logging.info("Lineage data sent successfully")
 
     @staticmethod
-    def template_fields_to_string(operator) -> str:
+    def template_fields_to_string(operator):
         """
         :param operator: Airflow operator what was executed
         :return: Json string representing all template fields in operator.
@@ -203,7 +207,7 @@ class AtlasBackend(LineageBackend):
     def _create_entity(client, entity):
         """
         Create Atlas entity
-        
+
         :param client: atlas client
         :param data: dict with entity data
         :return: Nothing
@@ -215,7 +219,7 @@ class AtlasBackend(LineageBackend):
         logging.info("Entity {}={} created".format(entity.type_name, guid))
 
     @staticmethod
-    def _get_response_guid(response) -> str:
+    def _get_response_guid(response):
         """ Get guid of created entity.
         If the entity already exists, just return guid of existing entity.
         """

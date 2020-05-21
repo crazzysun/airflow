@@ -161,7 +161,7 @@ class StandardTable(DataSet):
 
     """
     type_name = "standard_table"
-    attributes = ['schema_name', "name", "table_name"]
+    attributes = ["name", 'schema_name', "table_name"]
 
 
 class StandardColumn(DataSet):
@@ -171,7 +171,7 @@ class StandardColumn(DataSet):
         See typedefs in backend.atlas_typedef.py
     """
     type_name = "standard_column"
-    attributes = ['column', 'type', 'name']
+    attributes = ['name', 'column', 'type']
 
 
 class StandardFile(DataSet):
@@ -180,11 +180,3 @@ class StandardFile(DataSet):
     """
     type_name = "standard_file"
     attributes = ['name', 'path', 'cluster_name']
-
-
-class RedshiftTable(DataSet):
-    """
-        Represent redshift table, type definition lay in AtlasHook package.
-    """
-    type_name = "redshift_table"
-    attributes = ['schema_name', 'name', 'table_name']

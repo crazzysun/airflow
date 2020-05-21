@@ -133,32 +133,27 @@ class HadoopFile(File):
         self._data['clusterName'] = self.cluster_name
 
 
-class StandardDataSet(DataSet):
-    """
-        Represents default DataSet atlas type
-    """
-    type_name = "DataSet"
-    attributes = ["name"]
-
-
 class StandardAirflowOperator(DataSet):
     """
-        Represents airflow operator entity, this type used for storing lineage data
+    Represents airflow operator entity, this type used for storing lineage data
     """
 
     type_name = "airflow_standard_operator"
     attributes = ["dag_id", "task_id", "task_type", "command", "conn_id", "name", "last_execution_date",
-                  "start_date", "end_date", "inputs", "outputs", "template_fields"]
-    # TODO + additional_operator_attributes
+                  "start_date", "end_date", "inputs", "outputs",
+                  "template_fields"]
+
+    def __init__(self, additional_operator_attributes=None, **kwargs):
+        super(StandardAirflowOperator, self).__init__(**kwargs)
+        self.attributes = self.attributes + additional_operator_attributes
 
 
 class StandardTable(DataSet):
     """
-        Represents abstract table atlas entity for any sql-like source
-        Table are connected with column using atlas relationship attribute "columns".
-        See typedefs in backend.atlas_typedef.py
-        Relationship attribute "columns" is uses for showing schema in atlas ui.
-
+    Represents abstract table atlas entity for any sql-like source
+    Table are connected with column using atlas relationship attribute "columns".
+    See typedefs in lineage.backend.atlas.typedef
+    Relationship attribute "columns" is uses for showing schema in atlas ui.
     """
     type_name = "standard_table"
     attributes = ["name", 'schema_name', "table_name"]
@@ -166,9 +161,9 @@ class StandardTable(DataSet):
 
 class StandardColumn(DataSet):
     """
-        Represent abstract column atlas entity for any sql-like source.
-        Column are connected with table using atlas relationship attribute "table".
-        See typedefs in backend.atlas_typedef.py
+    Represent abstract column atlas entity for any sql-like source.
+    Column are connected with table using atlas relationship attribute "table".
+    See typedefs in lineage.backend.atlas.typedef
     """
     type_name = "standard_column"
     attributes = ['name', 'column', 'type']
@@ -176,7 +171,7 @@ class StandardColumn(DataSet):
 
 class StandardFile(DataSet):
     """
-        Represent abstact file in any file system. It can be localfs, hdfs, s3 or gcs.
+    Represent abstact file in any file system. It can be localfs, hdfs, s3 or gcs.
     """
     type_name = "standard_file"
     attributes = ['name', 'path', 'cluster_name']

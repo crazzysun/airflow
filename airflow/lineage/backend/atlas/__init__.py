@@ -33,7 +33,7 @@ This module require next properties in airflow.cfg:
 
 
     [atlas.extra]
-        create_if_not_absent = True
+        create_if_not_exist = True
         fail_if_lineage_error = True
         timeout = 600
 """
@@ -41,13 +41,13 @@ This module require next properties in airflow.cfg:
 import json
 import logging
 
-from airflow.lineage.backend import LineageBackend
-from airflow.lineage.backend.atlas import typedefs
 from atlasclient.client import Atlas
 from atlasclient.exceptions import HttpError
 
 from airflow.configuration import conf
 from airflow.exceptions import AirflowException
+from airflow.lineage.backend import LineageBackend
+from airflow.lineage.backend.atlas import typedefs
 from airflow.lineage.datasets import StandardAirflowOperator
 from airflow.utils.timezone import convert_to_utc
 
@@ -58,12 +58,13 @@ _username = conf.get("atlas", "username")
 _password = conf.get("atlas", "password")
 _port = conf.get("atlas", "port")
 _host = conf.get("atlas", "host")
-# If true, missing input and output atlas entities will create or update
-_create_if_not_exists = conf.getboolean("atlas.extra",
-                                        "create_if_not_absent")
+
+# additional operator attributes which will show as entity property
+_additional_operator_attributes = conf.get("atlas.extra", "additional_operator_attributes").split(",")
+# If true, missing input and output atlas entities will create/update
+_create_if_not_exists = conf.getboolean("atlas.extra", "create_if_not_exist")
 # If true, operator will be failed in error in sending lineage data
-_fail_if_lineage_error = conf.getboolean("atlas.extra",
-                                         "fail_if_lineage_error")
+_fail_if_lineage_error = conf.getboolean("atlas.extra", "fail_if_lineage_error")
 # timeout for atlas rest api client
 _timeout = conf.getint("atlas.extra", "timeout")
 
@@ -179,16 +180,17 @@ class AtlasBackend(LineageBackend):
             "template_fields": template_fields
         }
 
-        # TODO
-        # for attr in additonal_operator_attributes:
-        #     data[attr] = getattr(operator, attr, None)
+        for attr in _additional_operator_attributes:
+            data[attr] = getattr(operator, attr, None)
 
         if _start_date:
             data["start_date"] = _start_date.strftime(SERIALIZED_DATE_FORMAT_STR)
         if _end_date:
             data["end_date"] = _end_date.strftime(SERIALIZED_DATE_FORMAT_STR)
 
-        process = StandardAirflowOperator(qualified_name=qualified_name, data=data)
+        process = StandardAirflowOperator(qualified_name=qualified_name,
+                                          data=data,
+                                          additional_operator_attributes=_additional_operator_attributes)
         AtlasBackend._create_entity(client=client, entity=process)
         logging.info("Lineage data sent successfully")
 
@@ -201,7 +203,7 @@ class AtlasBackend(LineageBackend):
         result = dict()
         for field in operator.__class__.template_fields:
             result[field] = str(getattr(operator, field, None))
-        return json.dumps(result)
+        return json.dumps(result, indent=2)
 
     @staticmethod
     def _create_entity(client, entity):
@@ -216,11 +218,12 @@ class AtlasBackend(LineageBackend):
         data = {"entity": entity.as_dict()}
         result = client.entity_post.create(data=data)
         guid = AtlasBackend._get_response_guid(result)
-        logging.info("Entity {}={} created".format(entity.type_name, guid))
+        logging.info("Entity {}={} created/updated".format(entity.type_name, guid))
 
     @staticmethod
     def _get_response_guid(response):
-        """ Get guid of created entity.
+        """
+        Get guid of created entity.
         If the entity already exists, just return guid of existing entity.
         """
         try:

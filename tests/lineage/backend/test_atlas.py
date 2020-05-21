@@ -18,15 +18,17 @@
 # under the License.
 import unittest
 
+from backports.configparser import DuplicateSectionError
+from tests.compat import mock
+
+from airflow import AirflowException
 from airflow.configuration import conf, AirflowConfigException
+from airflow.lineage.backend import atlas
 from airflow.lineage.backend.atlas import AtlasBackend
 from airflow.lineage.datasets import File
 from airflow.models import DAG, TaskInstance as TI
 from airflow.operators.dummy_operator import DummyOperator
 from airflow.utils import timezone
-from tests.compat import mock
-
-from backports.configparser import DuplicateSectionError
 
 DEFAULT_DATE = timezone.datetime(2016, 1, 1)
 
@@ -35,51 +37,65 @@ class TestAtlas(unittest.TestCase):
     def setUp(self):
         try:
             conf.add_section("atlas")
+            conf.add_section("atlas.extra")
         except AirflowConfigException:
             pass
         except DuplicateSectionError:
             pass
-
         conf.set("atlas", "username", "none")
         conf.set("atlas", "password", "none")
         conf.set("atlas", "host", "none")
         conf.set("atlas", "port", "0")
-        self.atlas = AtlasBackend()
+        self.atlas_backend = AtlasBackend()
+        self.dag = DAG(dag_id='test_prepare_lineage', start_date=DEFAULT_DATE)
+
+        f1 = File("/tmp/does_not_exist_1")
+        f2 = File("/tmp/does_not_exist_2")
+        self.inlets_d = [f1, ]
+        self.outlets_d = [f2, ]
+
+        self.op1 = DummyOperator(task_id='leave1',
+                                 inlets={"datasets": self.inlets_d},
+                                 outlets={"datasets": self.outlets_d},
+                                 dag=self.dag)
+
+        self.ctx = {"ti": TI(task=self.op1, execution_date=DEFAULT_DATE)}
 
     @mock.patch("airflow.lineage.backend.atlas.Atlas")
     def test_lineage_send(self, atlas_mock):
+        atlas._create_if_not_exists = False
         td = mock.MagicMock()
         en = mock.MagicMock()
         atlas_mock.return_value = mock.Mock(typedefs=td, entity_post=en)
 
-        dag = DAG(
-            dag_id='test_prepare_lineage',
-            start_date=DEFAULT_DATE
-        )
-
-        f1 = File("/tmp/does_not_exist_1")
-        f2 = File("/tmp/does_not_exist_2")
-
-        inlets_d = [f1, ]
-        outlets_d = [f2, ]
-
-        with dag:
-            op1 = DummyOperator(task_id='leave1',
-                                inlets={"datasets": inlets_d},
-                                outlets={"datasets": outlets_d})
-
-        ctx = {"ti": TI(task=op1, execution_date=DEFAULT_DATE)}
-
-        self.atlas.send_lineage(operator=op1, inlets=inlets_d,
-                                outlets=outlets_d, context=ctx)
+        self.atlas_backend.send_lineage(operator=self.op1, inlets=self.inlets_d,
+                                        outlets=self.outlets_d, context=self.ctx)
 
         self.assertEqual(td.create.call_count, 2)
         self.assertTrue(en.create.called)
-        print(en.mock_calls)
-        print(en.create.call_count)
+        self.assertEqual(en.create.call_count, 1)
+
+    @mock.patch("airflow.lineage.backend.atlas.Atlas")
+    def test_create_inlets_outlets_entities(self, atlas_mock):
+        atlas._create_if_not_exists = True
+        td = mock.MagicMock()
+        en = mock.MagicMock()
+        atlas_mock.return_value = mock.Mock(typedefs=td, entity_post=en)
+
+        self.atlas_backend.send_lineage(operator=self.op1, inlets=self.inlets_d,
+                                        outlets=self.outlets_d, context=self.ctx)
+        self.assertEqual(td.create.call_count, 2)
+        self.assertTrue(en.create.called)
         self.assertEqual(en.create.call_count, 3)
 
-        # test can be broader
+    @mock.patch("airflow.lineage.backend.atlas.Atlas")
+    def test_dag_fail_if_lineage_fail(self, atlas_mock):
+        atlas._fail_if_lineage_error = True
+        conf.set("atlas.extra", "fail_if_lineage_error", "True")
+        td = mock.MagicMock()
+        en = mock.Mock(side_effect=AirflowException)
+        atlas_mock.return_value = mock.Mock(typedefs=td, entity_post=en)
 
-    def test_setup(self):
-        self.assertTrue(True)
+        with self.assertRaises(AirflowException):
+            self.atlas_backend.send_lineage(operator=self.op1, inlets=self.inlets_d,
+                                            outlets=self.outlets_d, context=self.ctx)

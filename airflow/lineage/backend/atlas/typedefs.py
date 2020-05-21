@@ -17,13 +17,16 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-
+from airflow.configuration import conf
 from airflow.lineage.datasets import StandardTable, StandardColumn, StandardFile, StandardAirflowOperator
 
-TABLE_COLUMN_RELATIONSHIP_TYPE = "standard_table_column"  # relationship name
+# relationship name
+TABLE_COLUMN_RELATIONSHIP_TYPE = "standard_table_column"
+# additional operator attributes which will show as entity property
+additional_operator_attributes = conf.get("atlas.extra", "additional_operator_attributes").split(",")
 
 
-def to_string_attribute(name) -> dict:
+def to_string_attribute(name):
     """
     Generate optional string attribute definition
 
@@ -128,13 +131,8 @@ operator_attributes_defs = [
 ]
 
 """
-    Generate additional operator attributes, these attributes taken from constants package
+Generate additional operator attributes, these attributes taken from constants package
 """
-additional_operator_attributes = ['sql', 'job_flow_id', 'cluster_states',
-                                  'job_flow_name', 'steps', 'labels', 'source_objects',
-                                  'bucket', 'schema_object', 'destination_project_dataset_table',
-                                  'hql', 'hiveconfs', 'schema']
-# TODO: delete additional_operator_attributes from here !!!
 for attr in additional_operator_attributes:
     operator_attributes_defs.append(to_string_attribute(attr))
 
@@ -211,9 +209,6 @@ standard_column_type = {
     "options": {
         "schemaAttributes": "[\"column\","
                             " \"type\","
-                            " \"encoding\","
-                            " \"distkey\","
-                            " \"sortkey\","
                             " \"notnull\"]"
     },
     "relationshipAttributeDefs": [

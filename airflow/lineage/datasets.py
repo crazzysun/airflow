@@ -17,9 +17,8 @@
 # specific language governing permissions and limitations
 # under the License.
 import six
-
-from typing import List
 from jinja2 import Environment
+from typing import List
 
 
 def _inherited(cls):
@@ -29,8 +28,9 @@ def _inherited(cls):
 
 
 class DataSet(object):
-    attributes = []  # type: List[str]
-    type_name = "dataSet"
+    attributes = ["name"]  # type: List[str]
+    type_name = "DataSet"
+    classification_name = "Standard_entities"
 
     def __init__(self, qualified_name=None, data=None, **kwargs):
         self._qualified_name = qualified_name
@@ -133,9 +133,45 @@ class HadoopFile(File):
         self._data['clusterName'] = self.cluster_name
 
 
-class Operator(DataSet):
-    type_name = "airflow_operator"
+class StandardAirflowOperator(DataSet):
+    """
+    Represents airflow operator entity, this type used for storing lineage data
+    """
 
-    # todo we can derive this from the spec
-    attributes = ["dag_id", "task_id", "command", "conn_id", "name", "execution_date",
-                  "start_date", "end_date", "inputs", "outputs"]
+    type_name = "airflow_standard_operator"
+    attributes = ["dag_id", "task_id", "task_type", "command", "conn_id", "name", "last_execution_date",
+                  "start_date", "end_date", "inputs", "outputs",
+                  "template_fields"]
+
+    def __init__(self, additional_operator_attributes=None, **kwargs):
+        super(StandardAirflowOperator, self).__init__(**kwargs)
+        self.attributes = self.attributes + additional_operator_attributes
+
+
+class StandardTable(DataSet):
+    """
+    Represents abstract table atlas entity for any sql-like source
+    Table are connected with column using atlas relationship attribute "columns".
+    See typedefs in lineage.backend.atlas.typedef
+    Relationship attribute "columns" is uses for showing schema in atlas ui.
+    """
+    type_name = "standard_table"
+    attributes = ["name", 'schema_name', "table_name"]
+
+
+class StandardColumn(DataSet):
+    """
+    Represent abstract column atlas entity for any sql-like source.
+    Column are connected with table using atlas relationship attribute "table".
+    See typedefs in lineage.backend.atlas.typedef
+    """
+    type_name = "standard_column"
+    attributes = ['name', 'column', 'type']
+
+
+class StandardFile(DataSet):
+    """
+    Represent abstact file in any file system. It can be localfs, hdfs, s3 or gcs.
+    """
+    type_name = "standard_file"
+    attributes = ['name', 'path', 'cluster_name']
